@@ -1,0 +1,15 @@
+# Media files — too large for git, managed locally
+clips/*.mp4
+clips/*.mov
+clips/*.webm
+clips/*.m4v
+clips/*.ogv
+audio/*.mp3
+audio/*.wav
+audio/*.m4a
+audio/*.ogg
+audio/*.flac
+
+# OS
+.DS_Store
+Thumbs.db

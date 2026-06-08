@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Looper</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: #000;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    /* ── Video ───────────────────────────────────── */
+    #player {
+      position: fixed;
+      inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      z-index: 0;
+    }
+
+    /* ── Start overlay ───────────────────────────── */
+    #start-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      background: #0a0a0a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5rem;
+      cursor: pointer;
+      transition: opacity 0.6s ease;
+    }
+
+    #start-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .start-icon {
+      width: 56px;
+      height: 56px;
+      border: 1.5px solid rgba(255,255,255,0.2);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(255,255,255,0.5);
+      transition: border-color 0.2s, color 0.2s;
+    }
+
+    #start-overlay:hover .start-icon {
+      border-color: rgba(255,255,255,0.6);
+      color: rgba(255,255,255,0.9);
+    }
+
+    .start-icon svg { width: 22px; height: 22px; margin-left: 3px; }
+
+    .start-label {
+      font-size: 0.7rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.25);
+    }
+
+    /* ── Clip name ───────────────────────────────── */
+    #clip-name {
+      position: fixed;
+      bottom: 2rem;
+      left: 2.25rem;
+      z-index: 10;
+      font-size: 0.7rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.55);
+      opacity: 0;
+      transform: translateY(4px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+      pointer-events: none;
+      max-width: calc(100vw - 120px);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #clip-name.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ── Controls (bottom-right) ─────────────────── */
+    .controls {
+      position: fixed;
+      bottom: 1.75rem;
+      right: 1.75rem;
+      z-index: 10;
+      display: flex;
+      gap: 0.6rem;
+      align-items: center;
+    }
+
+    .ctrl-btn {
+      width: 36px;
+      height: 36px;
+      background: none;
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: rgba(255,255,255,0.45);
+      transition: border-color 0.2s, color 0.2s;
+    }
+
+    .ctrl-btn:hover {
+      border-color: rgba(255,255,255,0.55);
+      color: rgba(255,255,255,0.9);
+    }
+
+    .ctrl-btn svg { width: 15px; height: 15px; }
+
+    /* ── Empty state ─────────────────────────────── */
+    #empty-state {
+      position: fixed;
+      inset: 0;
+      z-index: 5;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      text-align: center;
+      padding: 2rem;
+    }
+
+    #empty-state.visible { display: flex; }
+
+    #empty-state p {
+      font-size: 0.72rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.2);
+      line-height: 2;
+    }
+
+    #empty-state code {
+      font-family: 'SF Mono', 'Fira Mono', monospace;
+      background: rgba(255,255,255,0.06);
+      padding: 0.2rem 0.55rem;
+      border-radius: 3px;
+      font-size: 0.75rem;
+      letter-spacing: 0;
+      text-transform: none;
+    }
+  </style>
+</head>
+<body>
+
+  <video id="player" playsinline preload="auto"></video>
+  <audio id="audio" loop preload="auto"></audio>
+
+  <!-- Start overlay -->
+  <div id="start-overlay">
+    <div class="start-icon">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <polygon points="5,3 19,12 5,21"/>
+      </svg>
+    </div>
+    <span class="start-label" id="start-label">Click to play</span>
+  </div>
+
+  <!-- Empty state (shown after clicking when no clips exist) -->
+  <div id="empty-state">
+    <p>
+      No clips found.<br>
+      Add video files to <code>clips/</code><br>
+      then run <code>node generate-manifest.js</code>
+    </p>
+  </div>
+
+  <!-- Clip name overlay -->
+  <div id="clip-name"></div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <!-- Skip -->
+    <button class="ctrl-btn" id="btn-skip" title="Next clip">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="5,4 15,12 5,20"/>
+        <line x1="19" y1="4" x2="19" y2="20"/>
+      </svg>
+    </button>
+    <!-- Mute -->
+    <button class="ctrl-btn" id="btn-mute" title="Toggle audio">
+      <svg id="icon-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+        <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+      </svg>
+      <svg id="icon-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+        <line x1="23" y1="9" x2="17" y2="15"/>
+        <line x1="17" y1="9" x2="23" y2="15"/>
+      </svg>
+    </button>
+  </div>
+
+  <script>
+    const video      = document.getElementById('player');
+    const audio      = document.getElementById('audio');
+    const overlay    = document.getElementById('start-overlay');
+    const emptyState = document.getElementById('empty-state');
+    const clipNameEl = document.getElementById('clip-name');
+    const startLabel = document.getElementById('start-label');
+    const btnSkip    = document.getElementById('btn-skip');
+    const btnMute    = document.getElementById('btn-mute');
+    const iconOn     = document.getElementById('icon-on');
+    const iconOff    = document.getElementById('icon-off');
+
+    let clips = [];
+    let index = 0;
+    let nameTimer = null;
+    let started = false;
+
+    /* ── Helpers ───────────────────────────────── */
+    function shuffle(arr) {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    function cleanName(filename) {
+      return filename
+        .replace(/\.[^.]+$/, '')           // strip extension
+        .replace(/^\d+\s*[._\-]?\s*/, '')  // strip leading number
+        .replace(/[-_]/g, ' ')             // separators → spaces
+        .trim();
+    }
+
+    function showName(name) {
+      clearTimeout(nameTimer);
+      clipNameEl.textContent = name;
+      clipNameEl.classList.add('visible');
+      nameTimer = setTimeout(() => clipNameEl.classList.remove('visible'), 3500);
+    }
+
+    /* ── Playback ──────────────────────────────── */
+    function playAt(i) {
+      index = ((i % clips.length) + clips.length) % clips.length;
+      video.src = 'clips/' + clips[index];
+      video.load();
+      video.play().catch(() => {});
+      showName(cleanName(clips[index]));
+    }
+
+    video.addEventListener('ended', () => {
+      const next = index + 1;
+      if (next >= clips.length) clips = shuffle(clips); // re-shuffle on loop
+      playAt(next);
+    });
+
+    /* ── Start ─────────────────────────────────── */
+    function start() {
+      if (started) return;
+      started = true;
+      overlay.classList.add('hidden');
+
+      if (clips.length === 0) {
+        emptyState.classList.add('visible');
+        return;
+      }
+
+      playAt(0);
+      audio.src = 'audio/soundtrack.mp3';
+      audio.play().catch(() => {});
+    }
+
+    overlay.addEventListener('click', start);
+
+    /* ── Skip ──────────────────────────────────── */
+    btnSkip.addEventListener('click', () => {
+      if (!started || clips.length === 0) return;
+      const next = index + 1;
+      if (next >= clips.length) clips = shuffle(clips);
+      playAt(next);
+    });
+
+    /* ── Mute ──────────────────────────────────── */
+    btnMute.addEventListener('click', () => {
+      audio.muted = !audio.muted;
+      iconOn.style.display  = audio.muted ? 'none' : '';
+      iconOff.style.display = audio.muted ? '' : 'none';
+    });
+
+    /* ── Keyboard shortcuts ────────────────────── */
+    document.addEventListener('keydown', e => {
+      if (e.code === 'Space') { e.preventDefault(); start(); }
+      if (e.code === 'ArrowRight' && started) btnSkip.click();
+      if (e.code === 'KeyM') btnMute.click();
+    });
+
+    /* ── Load manifest ─────────────────────────── */
+    fetch('clips.json')
+      .then(r => r.json())
+      .then(data => {
+        clips = shuffle(data.filter(f => typeof f === 'string' && f.length > 0));
+        if (clips.length === 0) {
+          startLabel.textContent = 'No clips found';
+        }
+      })
+      .catch(() => {
+        startLabel.textContent = 'Could not load clips';
+      });
+  </script>
+
+</body>
+</html>
