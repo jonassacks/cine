@@ -304,14 +304,18 @@
     const iconOff    = document.getElementById('icon-off');
 
     /* ── Config ──────────────────────────────────────
-       MANIFEST_URL: where the clip list comes from.
-         'clips.json'                  → static file in this repo
-         'https://<worker>.workers.dev'→ live listing of the R2 bucket
-       Either must return a JSON array of strings (filenames or full URLs).
+       MANIFEST_URL: where the media list comes from. Accepts either:
+         • a JSON array of clip strings            → e.g. local clips.json
+         • { "clips": [...], "audio": [...] }      → the R2-listing Worker
+       With the object form, the soundtrack is auto-detected too, so you
+       can replace the audio in R2 under any filename.
 
-       AUDIO_SRC: looping soundtrack (local path or full URL).            */
+       AUDIO_SRC: fallback soundtrack used only when the manifest doesn't
+       provide one (e.g. the plain-array local clips.json).               */
     const MANIFEST_URL = 'https://cineclips.jonas-374.workers.dev/';
     const AUDIO_SRC    = 'https://pub-4d2cbc4d9d64403d8814842155ac7f95.r2.dev/05_Passacaglia_320kbps-2ch.mp3';
+
+    let audioSrc = AUDIO_SRC;  // overridden by the manifest if it lists audio
 
     let clips     = [];
     let index     = 0;
@@ -430,7 +434,7 @@
       }
 
       playAt(0);
-      audio.src = AUDIO_SRC;
+      audio.src = audioSrc;
       audio.play().catch(() => {});
     }
 
@@ -459,7 +463,12 @@
     fetch(MANIFEST_URL, { cache: 'no-store' })
       .then(r => r.json())
       .then(data => {
-        clips = shuffle((data || []).filter(f => typeof f === 'string' && f.length > 0));
+        // Accept a plain array (local clips.json) or { clips, audio } (Worker)
+        const list  = Array.isArray(data) ? data : (data && data.clips) || [];
+        const audioList = (data && !Array.isArray(data) && data.audio) || [];
+
+        clips = shuffle(list.filter(f => typeof f === 'string' && f.length > 0));
+        if (audioList.length) audioSrc = audioList[0]; // first audio file = soundtrack
         if (clips.length === 0) startLabel.textContent = 'No clips found';
       })
       .catch(() => { startLabel.textContent = 'Could not load clips'; });
