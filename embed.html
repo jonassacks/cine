@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cine — embed</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: #000;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    /* Player fills the whole iframe */
+    .player { position: fixed; inset: 0; width: 100%; height: 100%; background: #000; }
+
+    .vid-layer {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      opacity: 0;
+      transition: opacity 0.25s ease;
+    }
+    .vid-layer.active { opacity: 1; }
+
+    /* Tap-to-start fallback (only shown if muted autoplay is blocked) */
+    #poster {
+      position: absolute; inset: 0; z-index: 20;
+      display: none;
+      align-items: center; justify-content: center;
+      background: #0a0a0a;
+      cursor: pointer;
+    }
+    #poster.show { display: flex; }
+    #poster .ring {
+      width: 60px; height: 60px;
+      border: 1.5px solid rgba(255,255,255,0.4);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      color: rgba(255,255,255,0.8);
+    }
+    #poster svg { width: 24px; height: 24px; margin-left: 3px; }
+
+    /* Clip name */
+    #clip-name {
+      position: absolute; bottom: 0.9rem; left: 1.1rem; z-index: 10;
+      font-size: 0.62rem; letter-spacing: 0.16em; text-transform: uppercase;
+      color: rgba(255,255,255,0.6);
+      opacity: 0; transform: translateY(4px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+      pointer-events: none;
+      max-width: calc(100% - 110px);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    #clip-name.visible { opacity: 1; transform: translateY(0); }
+
+    /* Controls */
+    .controls {
+      position: absolute; bottom: 0.8rem; right: 0.9rem; z-index: 10;
+      display: flex; gap: 0.5rem;
+    }
+    .ctrl-btn {
+      width: 32px; height: 32px;
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: rgba(255,255,255,0.65);
+      transition: border-color 0.2s, color 0.2s, background 0.2s;
+    }
+    .ctrl-btn:hover { border-color: rgba(255,255,255,0.7); color: #fff; background: rgba(0,0,0,0.55); }
+    .ctrl-btn svg { width: 13px; height: 13px; }
+
+    /* Pulse hint on the sound button until the user enables audio */
+    .ctrl-btn.hint { animation: pulse 2s ease-in-out infinite; border-color: rgba(255,255,255,0.6); color: #fff; }
+    @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.0); } 50% { box-shadow: 0 0 0 5px rgba(255,255,255,0.12); } }
+  </style>
+</head>
+<body>
+
+  <div class="player">
+    <video id="vid0" class="vid-layer active" playsinline preload="auto" muted></video>
+    <video id="vid1" class="vid-layer"        playsinline preload="auto" muted></video>
+
+    <div id="poster">
+      <div class="ring"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg></div>
+    </div>
+
+    <div id="clip-name"></div>
+
+    <div class="controls">
+      <button class="ctrl-btn" id="btn-skip" title="Next clip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="5,4 15,12 5,20"/><line x1="19" y1="4" x2="19" y2="20"/>
+        </svg>
+      </button>
+      <button class="ctrl-btn hint" id="btn-sound" title="Sound on/off">
+        <svg id="icon-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+          <line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
+        </svg>
+        <svg id="icon-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <audio id="audio" loop preload="auto"></audio>
+
+  <script>
+    const vids       = [document.getElementById('vid0'), document.getElementById('vid1')];
+    const audio      = document.getElementById('audio');
+    const poster     = document.getElementById('poster');
+    const clipNameEl = document.getElementById('clip-name');
+    const btnSkip    = document.getElementById('btn-skip');
+    const btnSound   = document.getElementById('btn-sound');
+    const iconOn     = document.getElementById('icon-on');
+    const iconOff    = document.getElementById('icon-off');
+
+    /* Same data source as the main site. */
+    const MANIFEST_URL = 'https://cineclips.jonas-374.workers.dev/';
+    const AUDIO_SRC    = 'https://pub-4d2cbc4d9d64403d8814842155ac7f95.r2.dev/05_Passacaglia_320kbps-2ch.mp3';
+
+    let audioSrc  = AUDIO_SRC;
+    let clips     = [];
+    let index     = 0;
+    let active    = 0;
+    let nameTimer = null;
+    let failCount = 0;
+    let soundOn   = false;
+
+    /* ── Helpers (shared logic with index.html) ─── */
+    function shuffle(arr) {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+    function resolveSrc(e) { return /^https?:\/\//i.test(e) ? e : 'clips/' + e; }
+    function cleanName(e) {
+      return e.replace(/[?#].*$/, '').replace(/^.*\//, '').replace(/%20/g, ' ')
+              .replace(/\.[^.]+$/, '').replace(/^\d+\s*[._\-]?\s*/, '')
+              .replace(/[-_]/g, ' ').trim();
+    }
+    function showName(name) {
+      clearTimeout(nameTimer);
+      clipNameEl.textContent = name;
+      clipNameEl.classList.add('visible');
+      nameTimer = setTimeout(() => clipNameEl.classList.remove('visible'), 3500);
+    }
+    function swapTo(n) { vids[n].classList.add('active'); vids[1 - n].classList.remove('active'); active = n; }
+    function preloadNext() {
+      if (clips.length < 2) return;
+      const ni = (index + 1) % clips.length;
+      vids[1 - active].src = resolveSrc(clips[ni]);
+      vids[1 - active].load();
+    }
+    function nextIndex() {
+      const next = index + 1;
+      if (next >= clips.length) clips = shuffle(clips);
+      return next;
+    }
+    function skipBroken() {
+      failCount++;
+      if (failCount >= clips.length) { showName('No playable clips'); return; }
+      playAt(nextIndex());
+    }
+    function playAt(i) {
+      if (clips.length === 0) return;
+      index = ((i % clips.length) + clips.length) % clips.length;
+      const n = 1 - active, vid = vids[n];
+      const wanted = resolveSrc(clips[index]);
+      if (!vid.src || !vid.src.endsWith(wanted.replace(/^.*\//, '/'))) { vid.src = wanted; vid.load(); }
+      vid.play()
+        .then(() => { failCount = 0; swapTo(n); showName(cleanName(clips[index])); preloadNext(); })
+        .catch(() => skipBroken());
+    }
+
+    vids.forEach(vid => {
+      vid.addEventListener('ended', () => { if (vid.classList.contains('active')) { failCount = 0; playAt(nextIndex()); } });
+      vid.addEventListener('error', () => { if (vid.classList.contains('active')) skipBroken(); });
+    });
+
+    /* ── Start the (muted) video loop automatically ─── */
+    function startVideo() {
+      if (clips.length === 0) return;
+      poster.classList.remove('show');
+      playAt(0);
+    }
+
+    // If muted autoplay is blocked, show a tap-to-start poster.
+    poster.addEventListener('click', () => { startVideo(); enableSound(); });
+
+    /* ── Sound: starts on user gesture (browser rule) ─ */
+    function enableSound() {
+      soundOn = true;
+      btnSound.classList.remove('hint');
+      iconOn.style.display = '';
+      iconOff.style.display = 'none';
+      audio.muted = false;
+      if (!audio.src) audio.src = audioSrc;
+      audio.play().catch(() => {});
+    }
+    function disableSound() {
+      soundOn = false;
+      iconOn.style.display = 'none';
+      iconOff.style.display = '';
+      audio.pause();
+    }
+    btnSound.addEventListener('click', () => { soundOn ? disableSound() : enableSound(); });
+
+    btnSkip.addEventListener('click', () => {
+      if (clips.length === 0) return;
+      vids[active].pause();
+      failCount = 0;
+      playAt(nextIndex());
+    });
+
+    /* ── Load manifest, then autoplay ─────────────── */
+    fetch(MANIFEST_URL, { cache: 'no-store' })
+      .then(r => r.json())
+      .then(data => {
+        const list = Array.isArray(data) ? data : (data && data.clips) || [];
+        const audioList = (data && !Array.isArray(data) && data.audio) || [];
+        clips = shuffle(list.filter(f => typeof f === 'string' && f.length > 0));
+        if (audioList.length) audioSrc = audioList[0];
+        if (clips.length === 0) return;
+
+        // Attempt muted autoplay; if blocked, reveal the tap-to-start poster.
+        vids[0].src = resolveSrc(clips[0]);
+        vids[0].load();
+        vids[0].play()
+          .then(() => { showName(cleanName(clips[0])); preloadNext(); })
+          .catch(() => poster.classList.add('show'));
+      })
+      .catch(() => poster.classList.add('show'));
+  </script>
+
+</body>
+</html>
