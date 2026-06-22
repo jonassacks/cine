@@ -166,9 +166,11 @@
 </head>
 <body>
 
-  <!-- Two video layers — one plays while the other preloads the next clip -->
-  <video id="vid0" class="vid-layer active" playsinline preload="auto"></video>
-  <video id="vid1" class="vid-layer"        playsinline preload="auto"></video>
+  <!-- Two video layers — one plays while the other preloads the next clip.
+       muted = clips are silent; the looping soundtrack is the only audio
+       (also makes autoplay reliable across browsers). -->
+  <video id="vid0" class="vid-layer active" playsinline preload="auto" muted></video>
+  <video id="vid1" class="vid-layer"        playsinline preload="auto" muted></video>
   <audio id="audio" loop preload="auto"></audio>
 
   <!-- Start overlay -->
