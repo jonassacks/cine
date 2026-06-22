@@ -240,6 +240,7 @@
     let active    = 0;   // which video element is currently showing
     let nameTimer = null;
     let started   = false;
+    let failCount = 0;   // consecutive unplayable clips (prevents infinite skip)
 
     /* ── Helpers ───────────────────────────────── */
     function shuffle(arr) {
@@ -290,6 +291,23 @@
       inactive.load();
     }
 
+    /* ── Advance to the next clip in the queue ──── */
+    function nextIndex() {
+      const next = index + 1;
+      if (next >= clips.length) clips = shuffle(clips); // re-shuffle on loop
+      return next;
+    }
+
+    /* ── A clip couldn't load/decode → skip it ──── */
+    function skipBroken() {
+      failCount++;
+      if (failCount >= clips.length) {  // every clip has failed — stop trying
+        showName('No playable clips');
+        return;
+      }
+      playAt(nextIndex());
+    }
+
     /* ── Play clip at index i ──────────────────── */
     function playAt(i) {
       if (clips.length === 0) return;
@@ -308,25 +326,29 @@
 
       vid.play()
         .then(() => {
+          failCount = 0;            // success resets the skip guard
           swapTo(nextActive);
           showName(cleanName(clips[index]));
-          preloadNext(); // start buffering the clip after this one
+          preloadNext();            // start buffering the clip after this one
         })
         .catch(() => {
-          // Fallback: force-load and swap anyway
-          swapTo(nextActive);
-          showName(cleanName(clips[index]));
-          preloadNext();
+          // Codec unsupported (e.g. HEVC/ProRes .mov in Chrome) or load failed
+          // → don't hang, skip to the next clip.
+          skipBroken();
         });
     }
 
-    // Both video elements share the same ended handler
+    // Active clip ended normally → advance to the next
     vids.forEach(vid => {
       vid.addEventListener('ended', () => {
-        if (!vid.classList.contains('active')) return; // only the active one triggers advance
-        const next = index + 1;
-        if (next >= clips.length) clips = shuffle(clips);
-        playAt(next);
+        if (!vid.classList.contains('active')) return;
+        failCount = 0;
+        playAt(nextIndex());
+      });
+      // Active clip errored mid-playback (e.g. stream dropped) → skip it
+      vid.addEventListener('error', () => {
+        if (!vid.classList.contains('active')) return;
+        skipBroken();
       });
     });
 
@@ -341,12 +363,8 @@
         return;
       }
 
-      // Prime the first clip directly onto vid0 (already active)
-      vids[0].src = resolveSrc(clips[0]);
-      vids[0].load();
-      vids[0].play().catch(() => {});
-      showName(cleanName(clips[0]));
-      preloadNext();
+      // Play the first clip via the normal path so it also skips on failure
+      playAt(0);
 
       audio.src = AUDIO_SRC;
       audio.play().catch(() => {});
@@ -358,9 +376,8 @@
     btnSkip.addEventListener('click', () => {
       if (!started || clips.length === 0) return;
       vids[active].pause();
-      const next = index + 1;
-      if (next >= clips.length) clips = shuffle(clips);
-      playAt(next);
+      failCount = 0;          // manual skip is intentional, not a failure
+      playAt(nextIndex());
     });
 
     /* ── Mute ──────────────────────────────────── */
