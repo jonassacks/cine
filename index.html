@@ -229,6 +229,12 @@
     const iconOn     = document.getElementById('icon-on');
     const iconOff    = document.getElementById('icon-off');
 
+    /* ── Config ────────────────────────────────────
+       Looping soundtrack. Local path or a full URL:
+         'audio/soundtrack.mp3'
+         'https://pub-xxxx.r2.dev/soundtrack.mp3'                */
+    const AUDIO_SRC = 'audio/soundtrack.mp3';
+
     let clips     = [];
     let index     = 0;
     let active    = 0;   // which video element is currently showing
@@ -245,11 +251,19 @@
       return a;
     }
 
-    function cleanName(filename) {
-      return filename
-        .replace(/\.[^.]+$/, '')
-        .replace(/^\d+\s*[._\-]?\s*/, '')
-        .replace(/[-_]/g, ' ')
+    // Accept either a bare filename ("clip1.mp4" → served from clips/)
+    // or a full URL ("https://pub-xxxx.r2.dev/clip1.mp4" → used as-is).
+    function resolveSrc(entry) {
+      return /^https?:\/\//i.test(entry) ? entry : 'clips/' + entry;
+    }
+
+    function cleanName(entry) {
+      return entry
+        .replace(/[?#].*$/, '')            // strip URL query/hash
+        .replace(/^.*\//, '')              // strip any path → just the filename
+        .replace(/\.[^.]+$/, '')           // strip extension
+        .replace(/^\d+\s*[._\-]?\s*/, '')  // strip leading number prefix
+        .replace(/[-_]/g, ' ')             // separators → spaces
         .trim();
     }
 
@@ -272,7 +286,7 @@
       if (clips.length < 2) return;
       const nextIndex = (index + 1) % clips.length;
       const inactive  = vids[1 - active];
-      inactive.src = 'clips/' + clips[nextIndex];
+      inactive.src = resolveSrc(clips[nextIndex]);
       inactive.load();
     }
 
@@ -286,9 +300,9 @@
 
       // If inactive layer already has this clip preloaded, play immediately;
       // otherwise load it now (may have a brief delay on first play only)
-      const expectedSrc = location.origin + location.pathname.replace(/[^/]*$/, '') + 'clips/' + clips[index];
-      if (!vid.src || !vid.src.endsWith('clips/' + clips[index])) {
-        vid.src = 'clips/' + clips[index];
+      const wanted = resolveSrc(clips[index]);
+      if (!vid.src || !vid.src.endsWith(wanted.replace(/^.*\//, '/'))) {
+        vid.src = wanted;
         vid.load();
       }
 
@@ -328,13 +342,13 @@
       }
 
       // Prime the first clip directly onto vid0 (already active)
-      vids[0].src = 'clips/' + clips[0];
+      vids[0].src = resolveSrc(clips[0]);
       vids[0].load();
       vids[0].play().catch(() => {});
       showName(cleanName(clips[0]));
       preloadNext();
 
-      audio.src = 'audio/soundtrack.mp3';
+      audio.src = AUDIO_SRC;
       audio.play().catch(() => {});
     }
 

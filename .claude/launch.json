@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "looper",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "3030", "--directory", "/Users/jonassacks/NativeDSD Music Dropbox/Jonas Sacks/looper"],
+      "port": 3030
+    }
+  ]
+}
