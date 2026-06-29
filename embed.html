@@ -13,9 +13,16 @@
       overflow: hidden;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
+    body { display: flex; flex-direction: column; }
 
-    /* Player fills the whole iframe */
-    .player { position: fixed; inset: 0; width: 100%; height: 100%; background: #000; }
+    /* Video area fills the space above the badge bar */
+    .player { position: relative; flex: 1 1 auto; min-height: 0; width: 100%; background: #000; }
+
+    /* Reeloop attribution badge below the player */
+    .brand-bar { flex: 0 0 auto; height: 30px; background: #0a0a0b; border-top: 1px solid rgba(255,255,255,0.09); display: flex; align-items: center; justify-content: center; text-decoration: none; }
+    .brand-link { display: inline-flex; align-items: center; gap: 0.42rem; color: rgba(255,255,255,0.5); font-size: 0.66rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; transition: color 0.15s; }
+    .brand-bar:hover .brand-link { color: rgba(255,255,255,0.92); }
+    .brand-link svg { display: block; }
 
     .vid-layer {
       position: absolute; inset: 0;
@@ -109,6 +116,13 @@
       </button>
     </div>
   </div>
+
+  <a class="brand-bar" href="https://reeloop.nl" target="_blank" rel="noopener noreferrer" title="Made with Reeloop">
+    <span class="brand-link">
+      <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7" fill="none" stroke="#E5484D" stroke-width="2.6"/><circle cx="12" cy="12" r="1.8" fill="#E5484D"/></svg>
+      Reeloop
+    </span>
+  </a>
 
   <audio id="audio" loop preload="auto"></audio>
 
